@@ -1,51 +1,64 @@
-/**
- * @file Домашка по FP ч. 2
- *
- * Подсказки:
- * Метод get у инстанса Api – каррированый
- * GET / https://animals.tech/{id}
- *
- * GET / https://api.tech/numbers/base
- * params:
- * – number [Int] – число
- * – from [Int] – из какой системы счисления
- * – to [Int] – в какую систему счисления
- *
- * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
- * Ответ будет приходить в поле {result}
- */
- import Api from '../tools/api';
+import Api from '../tools/api';
+import {__, allPass, andThen, assoc, compose, ifElse, otherwise, partial, prop, tap, test} from "ramda";
 
- const api = new Api();
+const api = new Api();
+const getResult = prop('result');
+const promiseGetResult = andThen(getResult);
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+const moreThanTwo = (x) => x > 2;
+const lessThanTen = (x) => x < 10;
+const getLength = prop('length');
+const promiseGetLength = andThen(getLength);
+const lengthMoreThanTwo = compose(moreThanTwo, getLength);
+const lengthLessThanTen = compose(lessThanTen, getLength);
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const isNumber = test(/^[0-9]+\.?[0-9]+$/);
+const isNumberFromTwoToTen = allPass([isNumber, lengthMoreThanTwo, lengthLessThanTen]);
+const castAndRound = compose(Math.round, Number);
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+const connectNumber = assoc('number', __, {from: 10, to: 2});
+const decimalToBinary = compose(api.get('https://api.tech/numbers/base'), connectNumber);
+const emptyGet = api.get(__, {});
+const promiseEmptyGet = andThen(emptyGet);
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+const connectAnimalId = (id) => `https://animals.tech/${id}`;
+const promiseConnectAnimalId = andThen(connectAnimalId);
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+const square = (x) => x * x;
+const promiseSquare = andThen(square);
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+const modThree = (x) => x % 3;
+const promiseModThree = andThen(modThree);
+
+const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
+    const tapWriteLog = tap(writeLog);
+    const promiseTapWriteLog = andThen(tapWriteLog);
+    const throwValidationError = partial(handleError, ['ValidationError']);
+    const promiseHandleSuccess = andThen(handleSuccess);
+    const elseHandleError = otherwise(handleError);
+
+    const steps = compose(
+        elseHandleError,
+        promiseHandleSuccess,
+        promiseGetResult,
+        promiseEmptyGet,
+        promiseConnectAnimalId,
+        promiseTapWriteLog,
+        promiseModThree,
+        promiseTapWriteLog,
+        promiseSquare,
+        promiseTapWriteLog,
+        promiseGetLength,
+        promiseTapWriteLog,
+        promiseGetResult,
+        decimalToBinary,
+        tapWriteLog,
+        castAndRound
+    );
+
+    const conditionalStep = ifElse(isNumberFromTwoToTen, steps, throwValidationError)
+    const process = compose(conditionalStep, tapWriteLog);
+    process(value);
+}
 
 export default processSequence;
